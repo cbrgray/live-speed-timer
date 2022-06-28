@@ -41,7 +41,15 @@ impl SplitterTimer {
         return SplitterTimer::time_to_string(self.main_timer);
     }
 
-    pub async fn update(&mut self) {
+    pub fn get_latest_split(&self) -> String {
+        return SplitterTimer::time_to_millistring(*self.splits.last().unwrap());
+    }
+
+    pub fn get_splits_count(&self) -> u16 {
+        return self.splits.len().try_into().unwrap();
+    }
+
+    pub fn update(&mut self) {
         self.main_timer = self.start_time.elapsed();
     }
 
