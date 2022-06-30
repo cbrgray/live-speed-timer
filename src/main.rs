@@ -8,12 +8,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use time::SplitterTimer;
 
-use crossterm::{execute, ExecutableCommand, cursor, style::Print, terminal};
+use crossterm::{execute, cursor, style::Print, terminal};
 use crossterm::event::{poll, read, Event, KeyCode};
 
 use tokio::sync;
 
-const UPDATES_PER_SECOND: u64 = 1;
+const UPDATES_PER_SECOND: u64 = 1; // this is only set low because vscode integrated terminal uses tons of cpu otherwise
 const SPLITS_Y_OFFSET: u16 = 0;
 
 #[tokio::main]
@@ -23,7 +23,11 @@ async fn main() {
     let (shutdown_ack_send, mut shutdown_ack_recv) = sync::mpsc::unbounded_channel::<()>();
 
     let speed_timer = Arc::new(Mutex::new(SplitterTimer::new()));
-    stdout().execute(terminal::Clear(terminal::ClearType::All)).expect("Failed to clear terminal");
+    execute!(
+        stdout(),
+        terminal::Clear(terminal::ClearType::All),
+        cursor::Hide,
+    ).expect("Failed to initialise the terminal");
 
     tokio::task::spawn(read_input(speed_timer.clone(), shutdown_trigger_send));
     tokio::task::spawn(tick_timer(speed_timer.clone(), shutdown_signal_recv, shutdown_ack_send));
