@@ -23,10 +23,13 @@ async fn main() {
     let (shutdown_ack_send, mut shutdown_ack_recv) = sync::mpsc::unbounded_channel::<()>();
 
     let speed_timer = Arc::new(Mutex::new(SplitterTimer::new()));
+
     execute!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
         cursor::Hide,
+        cursor::MoveTo(0, 0),
+        Print(SplitterTimer::time_to_string(Duration::new(0, 0))),
     ).expect("Failed to initialise the terminal");
 
     tokio::task::spawn(read_input(speed_timer.clone(), shutdown_trigger_send));
@@ -56,12 +59,26 @@ async fn read_input(speed_timer: Arc<Mutex<SplitterTimer>>, _shutdown_send: sync
                 Ok(Event::Key(event)) => {
                     match event.code {
                         KeyCode::Char(' ') => {
-                            speed_timer.split();
+                            if speed_timer.is_running {
+                                speed_timer.split();
+                                execute!(
+                                    stdout(),
+                                    cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
+                                    Print(speed_timer.get_latest_split())
+                                ).expect("Print split failed");
+                            }
+                        },
+                        KeyCode::Char('s') => {
+                            if speed_timer.is_running { speed_timer.stop() } else { speed_timer.start() };
+                        },
+                        KeyCode::Char('r') => {
+                            speed_timer.reset();
                             execute!(
                                 stdout(),
-                                cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
-                                Print(speed_timer.get_latest_split())
-                            ).expect("Print split failed");
+                                terminal::Clear(terminal::ClearType::All),
+                                cursor::MoveTo(0, 0),
+                                Print(speed_timer.get_time()),
+                            ).expect("Reset timer failed");
                         },
                         KeyCode::Esc => {
                             // speed_timer.stop();
@@ -83,15 +100,18 @@ async fn tick_timer(speed_timer: Arc<Mutex<SplitterTimer>>, shutdown_recv: sync:
     let mut interval = tokio::time::interval(Duration::from_millis(1000 / UPDATES_PER_SECOND));
 
     loop {
-        if *shutdown_recv.borrow() == true { break; };
-        {
+        if *shutdown_recv.borrow() == true {
+            break;
+        } else {
             let mut speed_timer = speed_timer.lock().unwrap();
-            speed_timer.update();
-            execute!(
-                stdout(),
-                cursor::MoveTo(0, 0),
-                Print(speed_timer.get_time()),
-            ).expect("Failed to print current time");
+            if speed_timer.is_running {
+                speed_timer.update();
+                execute!(
+                    stdout(),
+                    cursor::MoveTo(0, 0),
+                    Print(speed_timer.get_time()),
+                ).expect("Failed to print current time");
+            }
         }
 
         interval.tick().await;

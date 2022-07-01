@@ -1,28 +1,41 @@
 use std::time::{Duration, Instant};
 
 pub struct SplitterTimer {
-    main_timer: Duration,
+    current_total: Duration,
+    current_segment: Duration,
     start_time: Instant,
     splits: Vec<Duration>,
+    pub is_running: bool,
 }
 
 impl SplitterTimer {
 
     pub fn new() -> SplitterTimer {
         SplitterTimer {
-            main_timer: Duration::new(0, 0),
+            current_total: Duration::new(0, 0),
+            current_segment: Duration::new(0, 0),
             start_time: Instant::now(),
             splits: vec![],
+            is_running: false,
         }
     }
 
-    /*fn start(&mut self) {
+    pub fn start(&mut self) {
         self.start_time = Instant::now();
+        self.is_running = true;
     }
 
-    fn stop() {
+    pub fn stop(&mut self) {
+        self.current_total += self.current_segment;
+        self.is_running = false;
+    }
 
-    }*/
+    pub fn reset(&mut self) {
+        self.is_running = false;
+        self.current_total = Duration::new(0, 0);
+        self.current_segment = Duration::new(0, 0);
+        self.splits = vec![];
+    }
 
     pub fn time_to_string(duration: Duration) -> String {
         let seconds = duration.as_secs() % 60;
@@ -31,14 +44,14 @@ impl SplitterTimer {
         return format!("{hours:02}:{minutes:02}:{seconds:02}");
     }
 
-    pub fn time_to_millistring(duration: Duration) -> String {
+    fn time_to_millistring(duration: Duration) -> String {
         let milliseconds = duration.as_millis() % 1000;
-        let asdf = SplitterTimer::time_to_string(duration);
-        return format!("{asdf}.{milliseconds:03}");
+        let basic_time = SplitterTimer::time_to_string(duration);
+        return format!("{basic_time}.{milliseconds:03}");
     }
 
-    pub fn get_time(&mut self) -> String {
-        return SplitterTimer::time_to_string(self.main_timer);
+    pub fn get_time(&self) -> String {
+        return SplitterTimer::time_to_string(self.current_total + self.current_segment);
     }
 
     pub fn get_latest_split(&self) -> String {
@@ -50,10 +63,11 @@ impl SplitterTimer {
     }
 
     pub fn update(&mut self) {
-        self.main_timer = self.start_time.elapsed();
+        self.current_segment = self.start_time.elapsed();
     }
 
     pub fn split(&mut self) {
-        self.splits.push(self.start_time.elapsed());
+        self.update();
+        self.splits.push(self.current_total + self.current_segment);
     }
 }
