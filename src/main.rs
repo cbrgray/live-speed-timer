@@ -1,4 +1,5 @@
 mod timer;
+mod shutdown;
 
 extern crate tokio;
 extern crate crossterm;
@@ -59,7 +60,7 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::onesho
                 Ok(Event::Key(event)) => {
                     match event.code {
                         KeyCode::Char(' ') => {
-                            if speed_timer.is_running {
+                            if speed_timer.is_running() {
                                 speed_timer.split();
                                 execute!(
                                     stdout(),
@@ -69,7 +70,7 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::onesho
                             }
                         },
                         KeyCode::Char('s') => {
-                            if speed_timer.is_running { speed_timer.stop() } else { speed_timer.start() };
+                            if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
                         },
                         KeyCode::Char('r') => {
                             speed_timer.reset();
@@ -103,7 +104,7 @@ async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, shutdown_recv: sync::watch::
             break;
         } else {
             let mut speed_timer = speed_timer.lock().unwrap();
-            if speed_timer.is_running {
+            if speed_timer.is_running() {
                 execute!(
                     stdout(),
                     cursor::MoveTo(0, 0),

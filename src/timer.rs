@@ -5,7 +5,7 @@ pub struct Timer {
     current_segment: Duration,
     start_time: Instant,
     splits: Vec<Duration>,
-    pub is_running: bool,
+    is_running: bool,
 }
 
 impl Timer {
@@ -35,6 +35,10 @@ impl Timer {
         self.current_total = Duration::new(0, 0);
         self.current_segment = Duration::new(0, 0);
         self.splits = vec![];
+    }
+
+    pub fn is_running(&self) -> bool {
+        return self.is_running;
     }
 
     fn time_to_string(duration: Duration) -> String {
