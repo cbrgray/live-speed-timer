@@ -81,10 +81,9 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::onesho
                             ).expect("Reset timer failed");
                         },
                         KeyCode::Esc => {
-                            // speed_timer.stop();
                             break; // exiting the loop allows the task to end, which causes `_shutdown_send` to fire
                         },
-                        _ => todo!(),
+                        _ => (),
                     };
                     Ok(())
                 },

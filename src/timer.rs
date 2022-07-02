@@ -26,7 +26,7 @@ impl Timer {
     }
 
     pub fn stop(&mut self) {
-        self.current_total += self.current_segment;
+        self.current_total += self.start_time.elapsed();
         self.is_running = false;
     }
 
@@ -80,30 +80,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn timer_increases_while_running() {
-        let mut timer = Timer::new();
-        assert_eq!(Duration::new(0, 0), timer.get_time());
-        timer.start();
-        assert_ne!(Duration::new(0, 0), timer.get_time());
-    }
-
-    #[test]
-    fn timer_can_be_stopped() {
+    fn timer_starts_and_stops_as_expected() {
         let mut timer = Timer::new();
         timer.start();
+        assert_eq!(true, timer.is_running);
         timer.stop();
-        let stopped_time = timer.get_time();
-        let new_time = timer.get_time();
-        assert_eq!(stopped_time, new_time);
+        assert_eq!(false, timer.is_running);
     }
 
     #[test]
     fn resetting_zeroes_timer() {
         let mut timer = Timer::new();
         timer.start();
-        assert_ne!(Duration::new(0, 0), timer.get_time());
-        timer.stop();
-        assert_ne!(Duration::new(0, 0), timer.get_time());
         timer.reset();
         assert_eq!(Duration::new(0, 0), timer.get_time());
     }
