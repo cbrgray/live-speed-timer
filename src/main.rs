@@ -86,11 +86,11 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::onesho
                         },
                         _ => todo!(),
                     };
-                    Ok::<(), ()>(())
+                    Ok(())
                 },
-                Ok(Event::Mouse(_event)) => todo!(),
-                Ok(Event::Resize(_width, _height)) => todo!(),
-                Err(_) => todo!(),
+                Ok(Event::Mouse(_event)) => Ok(()),
+                Ok(Event::Resize(_width, _height)) => Ok(()),
+                Err(_) => Err(()),
             }.expect("Failed to read input");
         }
     }
