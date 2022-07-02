@@ -1,4 +1,4 @@
-mod time;
+mod timer;
 
 extern crate tokio;
 extern crate crossterm;
@@ -6,7 +6,7 @@ extern crate crossterm;
 use std::io::stdout;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use time::SplitterTimer;
+use timer::Timer;
 
 use crossterm::{execute, cursor, style::Print, terminal};
 use crossterm::event::{poll, read, Event, KeyCode};
@@ -22,14 +22,14 @@ async fn main() {
     let (shutdown_signal_send, shutdown_signal_recv) = sync::watch::channel(false);
     let (shutdown_ack_send, mut shutdown_ack_recv) = sync::mpsc::unbounded_channel::<()>();
 
-    let speed_timer = Arc::new(Mutex::new(SplitterTimer::new()));
+    let speed_timer = Arc::new(Mutex::new(Timer::new()));
 
     execute!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
         cursor::Hide,
         cursor::MoveTo(0, 0),
-        Print(SplitterTimer::time_to_string(Duration::new(0, 0))),
+        Print(speed_timer.clone().lock().unwrap().get_time_string()),
     ).expect("Failed to initialise the terminal");
 
     tokio::task::spawn(read_input(speed_timer.clone(), shutdown_trigger_send));
@@ -49,7 +49,7 @@ async fn main() {
     ()
 }
 
-async fn read_input(speed_timer: Arc<Mutex<SplitterTimer>>, _shutdown_send: sync::oneshot::Sender<()>) {
+async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::oneshot::Sender<()>) {
     loop {
         if poll(Duration::from_millis(500)).unwrap() {
             // It's guaranteed that the `read()` won't block when the `poll()`
@@ -77,7 +77,7 @@ async fn read_input(speed_timer: Arc<Mutex<SplitterTimer>>, _shutdown_send: sync
                                 stdout(),
                                 terminal::Clear(terminal::ClearType::All),
                                 cursor::MoveTo(0, 0),
-                                Print(speed_timer.get_time()),
+                                Print(speed_timer.get_time_string()),
                             ).expect("Reset timer failed");
                         },
                         KeyCode::Esc => {
@@ -96,7 +96,7 @@ async fn read_input(speed_timer: Arc<Mutex<SplitterTimer>>, _shutdown_send: sync
     }
 }
 
-async fn tick_timer(speed_timer: Arc<Mutex<SplitterTimer>>, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
+async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
     let mut interval = tokio::time::interval(Duration::from_millis(1000 / UPDATES_PER_SECOND));
 
     loop {
@@ -105,11 +105,10 @@ async fn tick_timer(speed_timer: Arc<Mutex<SplitterTimer>>, shutdown_recv: sync:
         } else {
             let mut speed_timer = speed_timer.lock().unwrap();
             if speed_timer.is_running {
-                speed_timer.update();
                 execute!(
                     stdout(),
                     cursor::MoveTo(0, 0),
-                    Print(speed_timer.get_time()),
+                    Print(speed_timer.get_time_string()),
                 ).expect("Failed to print current time");
             }
         }
