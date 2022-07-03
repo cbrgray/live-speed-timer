@@ -8,6 +8,7 @@ use std::io::stdout;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use timer::Timer;
+use shutdown::Shutdown;
 
 use crossterm::{execute, cursor, style::Print, terminal};
 use crossterm::event::{poll, read, Event, KeyCode};
@@ -19,9 +20,7 @@ const SPLITS_Y_OFFSET: u16 = 0;
 
 #[tokio::main]
 async fn main() {
-    let (shutdown_trigger_send, shutdown_trigger_recv) = sync::oneshot::channel::<()>();
-    let (shutdown_signal_send, shutdown_signal_recv) = sync::watch::channel(false);
-    let (shutdown_ack_send, mut shutdown_ack_recv) = sync::mpsc::unbounded_channel::<()>();
+    let mut shutdown = Shutdown::new();
 
     let speed_timer = Arc::new(Mutex::new(Timer::new()));
 
@@ -33,20 +32,20 @@ async fn main() {
         Print(speed_timer.clone().lock().unwrap().get_time_string()),
     ).expect("Failed to initialise the terminal");
 
-    tokio::task::spawn(read_input(speed_timer.clone(), shutdown_trigger_send));
-    tokio::task::spawn(tick_timer(speed_timer.clone(), shutdown_signal_recv, shutdown_ack_send));
+    tokio::task::spawn(read_input(speed_timer.clone(), shutdown.trigger_send));
+    tokio::task::spawn(tick_timer(speed_timer.clone(), shutdown.signal_recv, shutdown.ack_send));
 
     // await shutdown trigger from input task
     tokio::select! {
         // _ = tokio::signal::ctrl_c() => (),
-        _ = shutdown_trigger_recv => {
-            shutdown_signal_send.send(true).expect("Shutdown signal not sent"); // tell all other tasks to shut down
+        _ = shutdown.trigger_recv => {
+            shutdown.signal_send.send(true).expect("Shutdown signal not sent"); // tell all other tasks to shut down
             ()
         },
     };
 
     // await shutdown acknowledgement from all tasks
-    shutdown_ack_recv.recv().await;
+    shutdown.ack_recv.recv().await;
     ()
 }
 
