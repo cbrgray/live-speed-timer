@@ -1,5 +1,6 @@
 mod timer;
 mod shutdown;
+mod config;
 
 extern crate tokio;
 extern crate crossterm;
@@ -9,23 +10,28 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use timer::Timer;
 use shutdown::Shutdown;
+use config::Config;
 
 use crossterm::{execute, cursor, style::Print, terminal};
 use crossterm::event::{poll, read, Event, KeyCode};
 
 use tokio::sync;
 
-const UPDATES_PER_SECOND: u64 = 1; // this is only set low because vscode integrated terminal uses tons of cpu otherwise
+const WINDOW_TITLE: &str = "LiveSpeedTimer";
+const CFG_FILENAME: &str = "cfg.yaml";
 const SPLITS_Y_OFFSET: u16 = 0;
 
 #[tokio::main]
 async fn main() {
+    let cfg = Config::load_config(CFG_FILENAME);
+    
     let mut shutdown = Shutdown::new();
 
     let speed_timer = Arc::new(Mutex::new(Timer::new()));
 
     execute!(
         stdout(),
+        terminal::SetTitle(WINDOW_TITLE),
         terminal::Clear(terminal::ClearType::All),
         cursor::Hide,
         cursor::MoveTo(0, 0),
@@ -33,7 +39,7 @@ async fn main() {
     ).expect("Failed to initialise the terminal");
 
     tokio::task::spawn(read_input(speed_timer.clone(), shutdown.trigger_send));
-    tokio::task::spawn(tick_timer(speed_timer.clone(), shutdown.signal_recv, shutdown.ack_send));
+    tokio::task::spawn(tick_timer(speed_timer.clone(), cfg, shutdown.signal_recv, shutdown.ack_send));
 
     // await shutdown trigger from input task
     tokio::select! {
@@ -95,8 +101,8 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::onesho
     }
 }
 
-async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
-    let mut interval = tokio::time::interval(Duration::from_millis(1000 / UPDATES_PER_SECOND));
+async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
+    let mut interval = tokio::time::interval(Duration::from_millis(1000 / cfg.get_ups()));
 
     loop {
         if *shutdown_recv.borrow() == true {
