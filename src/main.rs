@@ -18,6 +18,7 @@ use crossterm::event::{poll, read, Event, KeyCode};
 use tokio::sync;
 
 const WINDOW_TITLE: &str = "LiveSpeedTimer";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 const CFG_FILENAME: &str = "cfg.yaml";
 const SPLITS_Y_OFFSET: u16 = 0;
 
@@ -31,7 +32,7 @@ async fn main() {
 
     execute!(
         stdout(),
-        terminal::SetTitle(WINDOW_TITLE),
+        terminal::SetTitle(format!("{} {}", WINDOW_TITLE, VERSION)),
         terminal::Clear(terminal::ClearType::All),
         cursor::Hide,
         cursor::MoveTo(0, 0),
