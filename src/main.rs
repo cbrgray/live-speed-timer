@@ -13,7 +13,7 @@ use shutdown::Shutdown;
 use config::Config;
 
 use crossterm::{execute, cursor, style::Print, terminal};
-use crossterm::event::{poll, read, Event, KeyCode};
+use crossterm::event::{poll, read, Event};
 
 use tokio::sync;
 
@@ -39,7 +39,7 @@ async fn main() {
         Print(speed_timer.clone().lock().unwrap().get_time_string()),
     ).expect("Failed to initialise the terminal");
 
-    tokio::task::spawn(read_input(speed_timer.clone(), shutdown.trigger_send));
+    tokio::task::spawn(read_input(speed_timer.clone(), cfg, shutdown.trigger_send));
     tokio::task::spawn(tick_timer(speed_timer.clone(), cfg, shutdown.signal_recv, shutdown.ack_send));
 
     // await shutdown trigger from input task
@@ -56,29 +56,29 @@ async fn main() {
     ()
 }
 
-async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::oneshot::Sender<()>) {
+async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send: sync::oneshot::Sender<()>) {
     loop {
-        if poll(Duration::from_millis(500)).unwrap() {
+        if poll(Duration::from_secs(1)).unwrap() {
             // It's guaranteed that the `read()` won't block when the `poll()`
             // function returns `true`
             let mut speed_timer = speed_timer.lock().unwrap();
             match read() {
                 Ok(Event::Key(event)) => {
                     match event.code {
-                        KeyCode::Char(' ') => {
+                        x if x == cfg.get_key_split() => {
                             if speed_timer.is_running() {
                                 speed_timer.split();
                                 execute!(
                                     stdout(),
                                     cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
-                                    Print(speed_timer.get_latest_split())
+                                    Print(speed_timer.get_latest_split()),
                                 ).expect("Print split failed");
                             }
                         },
-                        KeyCode::Char('s') => {
+                        x if x == cfg.get_key_stopstart() => {
                             if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
                         },
-                        KeyCode::Char('r') => {
+                        x if x == cfg.get_key_reset() => {
                             speed_timer.reset();
                             execute!(
                                 stdout(),
@@ -87,7 +87,7 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, _shutdown_send: sync::onesho
                                 Print(speed_timer.get_time_string()),
                             ).expect("Reset timer failed");
                         },
-                        KeyCode::Esc => {
+                        x if x == cfg.get_key_quit() => {
                             break; // exiting the loop allows the task to end, which causes `_shutdown_send` to fire
                         },
                         _ => (),
