@@ -30,6 +30,8 @@ async fn main() {
 
     let speed_timer = Arc::new(Mutex::new(Timer::new()));
 
+    terminal::enable_raw_mode().unwrap();
+
     execute!(
         stdout(),
         terminal::SetTitle(format!("{} {}", WINDOW_TITLE, VERSION)),
@@ -88,7 +90,7 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
                             ).expect("Reset timer failed");
                         },
                         x if x == cfg.get_key_quit() => {
-                            break; // exiting the loop allows the task to end, which causes `_shutdown_send` to fire
+                            break; // exiting the loop allows the task to end, which triggers `_shutdown_send`
                         },
                         _ => (),
                     };
@@ -100,6 +102,13 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
             }.expect("Failed to read input");
         }
     }
+    execute!(
+        stdout(),
+        terminal::Clear(terminal::ClearType::All),
+        cursor::Show,
+        cursor::MoveTo(0, 0),
+    ).unwrap();
+    terminal::disable_raw_mode().unwrap();
 }
 
 async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
