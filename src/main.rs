@@ -5,6 +5,7 @@ mod config;
 extern crate tokio;
 extern crate crossterm;
 
+use std::collections::HashMap;
 use std::io::stdout;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -13,7 +14,7 @@ use shutdown::Shutdown;
 use config::Config;
 
 use crossterm::{execute, cursor, style::Print, terminal};
-use crossterm::event::{poll, read, Event};
+use crossterm::event::{poll, read, Event, KeyCode};
 
 use tokio::sync;
 
@@ -30,8 +31,8 @@ async fn main() {
 
     let speed_timer = Arc::new(Mutex::new(Timer::new()));
 
+    // init term
     terminal::enable_raw_mode().unwrap();
-
     execute!(
         stdout(),
         terminal::SetTitle(format!("{} {}", WINDOW_TITLE, VERSION)),
@@ -59,6 +60,11 @@ async fn main() {
 }
 
 async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send: sync::oneshot::Sender<()>) {
+    // Map input key:function
+    let ct = ControllableType::new();
+    let mut bindings = HashMap::new();
+    ct.add_bindings(&mut bindings, cfg);
+
     loop {
         if poll(Duration::from_secs(1)).unwrap() {
             // It's guaranteed that the `read()` won't block when the `poll()`
@@ -66,42 +72,19 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
             let mut speed_timer = speed_timer.lock().unwrap();
             match read() {
                 Ok(Event::Key(event)) => {
-                    match event.code {
-                        x if x == cfg.get_key_split() => {
-                            if speed_timer.is_running() {
-                                speed_timer.split();
-                                execute!(
-                                    stdout(),
-                                    cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
-                                    Print(speed_timer.get_latest_split()),
-                                ).expect("Print split failed");
-                            }
-                        },
-                        x if x == cfg.get_key_stopstart() => {
-                            if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
-                        },
-                        x if x == cfg.get_key_reset() => {
-                            speed_timer.reset();
-                            execute!(
-                                stdout(),
-                                terminal::Clear(terminal::ClearType::All),
-                                cursor::MoveTo(0, 0),
-                                Print(speed_timer.get_time_string()),
-                            ).expect("Reset timer failed");
-                        },
-                        x if x == cfg.get_key_quit() => {
-                            break; // exiting the loop allows the task to end, which triggers `_shutdown_send`
-                        },
-                        _ => (),
-                    };
-                    Ok(())
+                    ct.controller_loop(event.code, &bindings, &mut speed_timer);
+                    if event.code == cfg.get_key_quit() {
+                        break; // exiting the loop allows the task to end, which triggers `_shutdown_send`
+                    }
                 },
-                Ok(Event::Mouse(_event)) => Ok(()),
-                Ok(Event::Resize(_width, _height)) => Ok(()),
-                Err(_) => Err(()),
-            }.expect("Failed to read input");
+                Ok(Event::Mouse(_event)) => (),
+                Ok(Event::Resize(_width, _height)) => (),
+                Err(_) => (),
+            };
         }
     }
+
+    // restore term and exit
     execute!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
@@ -129,5 +112,60 @@ async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: 
         }
 
         interval.tick().await;
+    }
+}
+
+// TODO is there any way to separate the input logic out of main?
+
+#[derive(Clone, Copy)]
+pub struct ControllableType();
+
+impl ControllableType {
+    pub fn new() -> ControllableType {
+        ControllableType()
+    }
+    
+    fn stopstart(speed_timer: &mut Timer) {
+        if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
+    }
+    
+    fn reset(speed_timer: &mut Timer) {
+        speed_timer.reset();
+        execute!(
+            stdout(),
+            terminal::Clear(terminal::ClearType::All),
+            cursor::MoveTo(0, 0),
+            Print(speed_timer.get_time_string()),
+        ).expect("Reset timer failed");
+    }
+    
+    fn split(speed_timer: &mut Timer) {
+        if speed_timer.is_running() {
+            speed_timer.split();
+            execute!(
+                stdout(),
+                cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
+                Print(speed_timer.get_latest_split()),
+            ).expect("Print split failed");
+        }
+    }
+}
+
+pub trait ControlHandler<T> {
+    fn controller_loop(self, data: T, bindings: &HashMap<T, &dyn Fn(&mut Timer)>, speed_timer: &mut Timer);
+    fn add_bindings<'a: 'b, 'b>(self, bindings: &'b mut HashMap<T, &'a dyn Fn(&mut Timer)>, cfg: Config);
+}
+
+impl ControlHandler<KeyCode> for ControllableType {
+    fn controller_loop(self, data: KeyCode, bindings: &HashMap<KeyCode, &dyn Fn(&mut Timer)>, speed_timer: &mut Timer) {
+        if let Some(x) = bindings.get(&data) {
+            x(speed_timer)
+        }
+    }
+    
+    fn add_bindings<'a: 'b, 'b>(self, bindings: &'b mut HashMap<KeyCode, &'a dyn Fn(&mut Timer)>, cfg: Config) {
+        bindings.insert(cfg.get_key_stopstart(), &ControllableType::stopstart);
+        bindings.insert(cfg.get_key_reset(), &ControllableType::reset);
+        bindings.insert(cfg.get_key_split(), &ControllableType::split);
     }
 }
