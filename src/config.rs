@@ -1,6 +1,5 @@
 use crossterm::event::KeyCode;
 use serde::{Serialize, Deserialize};
-use serde_yaml;
 
 use std::fs;
 use std::clone::Clone;
@@ -50,11 +49,11 @@ pub struct Config {
 }
 
 fn default_ups() -> u64 {
-    return 30;
+    30
 }
 
 fn default_keys() -> Keys {
-    return Keys {
+    Keys {
         split: KeyCode::Char(' '),
         stopstart: KeyCode::Char('s'),
         reset: KeyCode::Char('r'),
@@ -76,43 +75,43 @@ impl Config {
             .create_new(true)
             .open(filepath);
         
-        if file.is_ok() {
+        if let Ok(mut existing_file) = file {
             // file was created successfully, therefore it didn't exist, so populate it with defaults
             let def = Config::new();
             let def_str = serde_yaml::to_string(&def).unwrap();
-            file.unwrap().write_all(def_str.as_bytes()).expect("Failed to create new cfg file");
-            return def;
+            existing_file.write_all(def_str.as_bytes()).expect("Failed to create new cfg file");
+            def
+        } else {
+            // file couldn't be created so it did exist - just read it normally
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(filepath);
+
+            let mut contents = String::new();
+            file.unwrap().read_to_string(&mut contents).expect("Failed to read cfg file");
+
+            serde_yaml::from_str(&contents).expect("Failed to load cfg")
         }
-
-        // file couldn't be created so it did exist - just read it normally
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(filepath);
-
-        let mut contents = String::new();
-        file.unwrap().read_to_string(&mut contents).expect("Failed to read cfg file");
-
-        return serde_yaml::from_str(&contents).expect("Failed to load cfg");
     }
 
     pub fn get_ups(self) -> u64 {
-        return self.ups;
+        self.ups
     }
 
     pub fn get_key_split(self) -> KeyCode {
-        return self.keys.split;
+        self.keys.split
     }
 
     pub fn get_key_stopstart(self) -> KeyCode {
-        return self.keys.stopstart;
+        self.keys.stopstart
     }
 
     pub fn get_key_reset(self) -> KeyCode {
-        return self.keys.reset;
+        self.keys.reset
     }
 
     pub fn get_key_quit(self) -> KeyCode {
-        return self.keys.quit;
+        self.keys.quit
     }
 }

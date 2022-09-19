@@ -8,6 +8,12 @@ pub struct Timer {
     is_running: bool,
 }
 
+impl Default for Timer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Timer {
 
     pub fn new() -> Timer {
@@ -38,39 +44,42 @@ impl Timer {
     }
 
     pub fn is_running(&self) -> bool {
-        return self.is_running;
+        self.is_running
     }
 
     fn time_to_string(duration: Duration) -> String {
         let seconds = duration.as_secs() % 60;
         let minutes = (duration.as_secs() / 60) % 60;
         let hours = (duration.as_secs() / 60) / 60;
-        return format!("{hours:02}:{minutes:02}:{seconds:02}");
+
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
     }
 
     fn time_to_millistring(duration: Duration) -> String {
         let milliseconds = duration.as_millis() % 1000;
         let basic_time = Timer::time_to_string(duration);
-        return format!("{basic_time}.{milliseconds:03}");
+
+        format!("{basic_time}.{milliseconds:03}")
     }
 
     pub fn get_time(&mut self) -> Duration {
         if self.is_running {
             self.current_segment = self.start_time.elapsed();
         }
-        return self.current_total + self.current_segment;
+
+        self.current_total + self.current_segment
     }
 
     pub fn get_time_string(&mut self) -> String {
-        return Timer::time_to_string(self.get_time());
+        Timer::time_to_string(self.get_time())
     }
 
     pub fn get_latest_split(&self) -> String {
-        return Timer::time_to_millistring(*self.splits.last().unwrap());
+        Timer::time_to_millistring(*self.splits.last().unwrap())
     }
 
     pub fn get_splits_count(&self) -> u16 {
-        return self.splits.len().try_into().unwrap();
+        self.splits.len().try_into().unwrap()
     }
 
     pub fn split(&mut self) {

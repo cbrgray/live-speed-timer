@@ -50,13 +50,11 @@ async fn main() {
         // _ = tokio::signal::ctrl_c() => (),
         _ = shutdown.trigger_recv => {
             shutdown.signal_send.send(true).expect("Shutdown signal not sent"); // tell all other tasks to shut down
-            ()
         },
     };
 
     // await shutdown acknowledgement from all tasks
     shutdown.ack_recv.recv().await;
-    ()
 }
 
 async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send: sync::oneshot::Sender<()>) {
@@ -98,7 +96,7 @@ async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: 
     let mut interval = tokio::time::interval(Duration::from_millis(1000 / cfg.get_ups()));
 
     loop {
-        if *shutdown_recv.borrow() == true {
+        if *shutdown_recv.borrow() {
             break;
         } else {
             let mut speed_timer = speed_timer.lock().unwrap();
@@ -119,6 +117,12 @@ async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: 
 
 #[derive(Clone, Copy)]
 pub struct ControllableType();
+
+impl Default for ControllableType {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ControllableType {
     pub fn new() -> ControllableType {
