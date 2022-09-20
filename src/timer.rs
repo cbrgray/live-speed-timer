@@ -1,28 +1,32 @@
 use std::time::{Duration, Instant};
 
+use crate::config::Config;
+
 pub struct Timer {
     current_total: Duration,
     current_segment: Duration,
     start_time: Instant,
     splits: Vec<Duration>,
     is_running: bool,
+    display_fmt_func: fn(Duration) -> String,
 }
 
 impl Default for Timer {
     fn default() -> Self {
-        Self::new()
+        Self::new(Config::new())
     }
 }
 
 impl Timer {
 
-    pub fn new() -> Timer {
-        Timer {
+    pub fn new(cfg: Config) -> Self {
+        Self {
             current_total: Duration::new(0, 0),
             current_segment: Duration::new(0, 0),
             start_time: Instant::now(),
             splits: vec![],
             is_running: false,
+            display_fmt_func: if cfg.get_show_millis() { Self::time_to_millistring } else { Self::time_to_string },
         }
     }
 
@@ -57,7 +61,7 @@ impl Timer {
 
     fn time_to_millistring(duration: Duration) -> String {
         let milliseconds = duration.as_millis() % 1000;
-        let basic_time = Timer::time_to_string(duration);
+        let basic_time = Self::time_to_string(duration);
 
         format!("{basic_time}.{milliseconds:03}")
     }
@@ -71,11 +75,11 @@ impl Timer {
     }
 
     pub fn get_time_string(&mut self) -> String {
-        Timer::time_to_string(self.get_time())
+        (self.display_fmt_func)(self.get_time())
     }
 
     pub fn get_latest_split(&self) -> String {
-        Timer::time_to_millistring(*self.splits.last().unwrap())
+        Self::time_to_millistring(*self.splits.last().unwrap())
     }
 
     pub fn get_splits_count(&self) -> u16 {
@@ -94,7 +98,7 @@ mod tests {
 
     #[test]
     fn timer_starts_and_stops_as_expected() {
-        let mut timer = Timer::new();
+        let mut timer = Timer::new(Config::new());
         timer.start();
         assert_eq!(true, timer.is_running);
         timer.stop();
@@ -103,7 +107,7 @@ mod tests {
 
     #[test]
     fn resetting_zeroes_timer() {
-        let mut timer = Timer::new();
+        let mut timer = Timer::new(Config::new());
         timer.start();
         timer.reset();
         assert_eq!(Duration::new(0, 0), timer.get_time());

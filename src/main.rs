@@ -29,7 +29,7 @@ async fn main() {
     
     let mut shutdown = Shutdown::new();
 
-    let speed_timer = Arc::new(Mutex::new(Timer::new()));
+    let speed_timer = Arc::new(Mutex::new(Timer::new(cfg)));
 
     // init term
     terminal::enable_raw_mode().unwrap();

@@ -44,12 +44,18 @@ struct Keys {
 pub struct Config {
     #[serde(default = "default_ups", rename = "updates_per_second")]
     ups: u64,
+    #[serde(default = "default_show_millis", rename = "show_milliseconds")]
+    show_millis: bool,
     #[serde(default = "default_keys")]
     keys: Keys,
 }
 
 fn default_ups() -> u64 {
     30
+}
+
+fn default_show_millis() -> bool {
+    true
 }
 
 fn default_keys() -> Keys {
@@ -61,15 +67,22 @@ fn default_keys() -> Keys {
     }
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Config {
-    fn new() -> Config {
-        Config {
+    pub fn new() -> Self {
+        Self {
             ups: default_ups(),
+            show_millis: default_show_millis(),
             keys: default_keys(),
         }
     }
 
-    pub fn load_config(filepath: &str) -> Config {
+    pub fn load_config(filepath: &str) -> Self {
         let file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -97,6 +110,10 @@ impl Config {
 
     pub fn get_ups(self) -> u64 {
         self.ups
+    }
+
+    pub fn get_show_millis(self) -> bool {
+        self.show_millis
     }
 
     pub fn get_key_split(self) -> KeyCode {
