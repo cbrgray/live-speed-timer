@@ -31,16 +31,7 @@ async fn main() {
 
     let speed_timer = Arc::new(Mutex::new(Timer::new(cfg)));
 
-    // init term
-    terminal::enable_raw_mode().unwrap();
-    execute!(
-        stdout(),
-        terminal::SetTitle(format!("{} {}", WINDOW_TITLE, VERSION)),
-        terminal::Clear(terminal::ClearType::All),
-        cursor::Hide,
-        cursor::MoveTo(0, 0),
-        Print(speed_timer.clone().lock().unwrap().get_time_string()),
-    ).expect("Failed to initialise the terminal");
+    init_term(&speed_timer.clone().lock().unwrap().get_time_string());
 
     tokio::task::spawn(read_input(speed_timer.clone(), cfg, shutdown.trigger_send));
     tokio::task::spawn(tick_timer(speed_timer.clone(), cfg, shutdown.signal_recv, shutdown.ack_send));
@@ -53,8 +44,32 @@ async fn main() {
         },
     };
 
+    restore_term();
+
     // await shutdown acknowledgement from all tasks
     shutdown.ack_recv.recv().await;
+}
+
+fn init_term(initial_text: &str) {
+    terminal::enable_raw_mode().expect("Failed to enable crossterm raw mode");
+    execute!(
+        stdout(),
+        terminal::SetTitle(format!("{} {}", WINDOW_TITLE, VERSION)),
+        terminal::Clear(terminal::ClearType::All),
+        cursor::Hide,
+        cursor::MoveTo(0, 0),
+        Print(initial_text),
+    ).expect("Failed to initialise the terminal");
+}
+
+fn restore_term() {
+    execute!(
+        stdout(),
+        terminal::Clear(terminal::ClearType::All),
+        cursor::Show,
+        cursor::MoveTo(0, 0),
+    ).expect("Failed to restore the terminal on shutdown");
+    terminal::disable_raw_mode().expect("Failed to disable crossterm raw mode");
 }
 
 async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send: sync::oneshot::Sender<()>) {
@@ -81,15 +96,6 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
             };
         }
     }
-
-    // restore term and exit
-    execute!(
-        stdout(),
-        terminal::Clear(terminal::ClearType::All),
-        cursor::Show,
-        cursor::MoveTo(0, 0),
-    ).unwrap();
-    terminal::disable_raw_mode().unwrap();
 }
 
 async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
