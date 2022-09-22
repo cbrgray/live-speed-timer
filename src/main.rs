@@ -73,10 +73,8 @@ fn restore_term() {
 }
 
 async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send: sync::oneshot::Sender<()>) {
-    // Map input key:function
-    let ct = ControllableType::new();
     let mut bindings = HashMap::new();
-    ct.add_bindings(&mut bindings, cfg);
+    add_input_bindings(&mut bindings, cfg);
 
     loop {
         if poll(Duration::from_secs(1)).unwrap() {
@@ -85,7 +83,7 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
             let mut speed_timer = speed_timer.lock().unwrap();
             match read() {
                 Ok(Event::Key(event)) => {
-                    ct.controller_loop(event.code, &bindings, &mut speed_timer);
+                    try_run_input(event.code, &bindings, &mut speed_timer);
                     if event.code == cfg.get_key_quit() {
                         break; // exiting the loop allows the task to end, which triggers `_shutdown_send`
                     }
@@ -119,63 +117,41 @@ async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: 
     }
 }
 
-// TODO is there any way to separate the input logic out of main?
+// User input functions
 
-#[derive(Clone, Copy)]
-pub struct ControllableType();
-
-impl Default for ControllableType {
-    fn default() -> Self {
-        Self::new()
-    }
+fn stopstart(speed_timer: &mut Timer) {
+    if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
 }
 
-impl ControllableType {
-    pub fn new() -> ControllableType {
-        ControllableType()
-    }
-    
-    fn stopstart(speed_timer: &mut Timer) {
-        if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
-    }
-    
-    fn reset(speed_timer: &mut Timer) {
-        speed_timer.reset();
+fn reset(speed_timer: &mut Timer) {
+    speed_timer.reset();
+    execute!(
+        stdout(),
+        terminal::Clear(terminal::ClearType::All),
+        cursor::MoveTo(0, 0),
+        Print(speed_timer.get_time_string()),
+    ).expect("Reset timer failed");
+}
+
+fn split(speed_timer: &mut Timer) {
+    if speed_timer.is_running() {
+        speed_timer.split();
         execute!(
             stdout(),
-            terminal::Clear(terminal::ClearType::All),
-            cursor::MoveTo(0, 0),
-            Print(speed_timer.get_time_string()),
-        ).expect("Reset timer failed");
-    }
-    
-    fn split(speed_timer: &mut Timer) {
-        if speed_timer.is_running() {
-            speed_timer.split();
-            execute!(
-                stdout(),
-                cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
-                Print(speed_timer.get_latest_split()),
-            ).expect("Print split failed");
-        }
+            cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
+            Print(speed_timer.get_latest_split()),
+        ).expect("Print split failed");
     }
 }
 
-pub trait ControlHandler<T> {
-    fn controller_loop(self, data: T, bindings: &HashMap<T, &dyn Fn(&mut Timer)>, speed_timer: &mut Timer);
-    fn add_bindings<'a: 'b, 'b>(self, bindings: &'b mut HashMap<T, &'a dyn Fn(&mut Timer)>, cfg: Config);
+fn add_input_bindings<'a: 'b, 'b>(bindings: &'b mut HashMap<KeyCode, &'a dyn Fn(&mut Timer)>, cfg: Config) {
+    bindings.insert(cfg.get_key_stopstart(), &stopstart);
+    bindings.insert(cfg.get_key_reset(), &reset);
+    bindings.insert(cfg.get_key_split(), &split);
 }
 
-impl ControlHandler<KeyCode> for ControllableType {
-    fn controller_loop(self, data: KeyCode, bindings: &HashMap<KeyCode, &dyn Fn(&mut Timer)>, speed_timer: &mut Timer) {
-        if let Some(x) = bindings.get(&data) {
-            x(speed_timer)
-        }
-    }
-    
-    fn add_bindings<'a: 'b, 'b>(self, bindings: &'b mut HashMap<KeyCode, &'a dyn Fn(&mut Timer)>, cfg: Config) {
-        bindings.insert(cfg.get_key_stopstart(), &ControllableType::stopstart);
-        bindings.insert(cfg.get_key_reset(), &ControllableType::reset);
-        bindings.insert(cfg.get_key_split(), &ControllableType::split);
+fn try_run_input(data: KeyCode, bindings: &HashMap<KeyCode, &dyn Fn(&mut Timer)>, speed_timer: &mut Timer) {
+    if let Some(x) = bindings.get(&data) {
+        x(speed_timer)
     }
 }
