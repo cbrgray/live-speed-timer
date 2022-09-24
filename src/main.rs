@@ -29,12 +29,12 @@ async fn main() {
     
     let mut shutdown = Shutdown::new();
 
-    let speed_timer = Arc::new(Mutex::new(Timer::new(cfg)));
+    let timer = Arc::new(Mutex::new(Timer::new(cfg)));
 
-    init_term(&speed_timer.clone().lock().unwrap().get_time_string());
+    init_term(&timer.clone().lock().unwrap().get_time_string());
 
-    tokio::task::spawn(read_input(speed_timer.clone(), cfg, shutdown.trigger_send));
-    tokio::task::spawn(tick_timer(speed_timer.clone(), cfg, shutdown.signal_recv, shutdown.ack_send));
+    tokio::task::spawn(read_input(timer.clone(), cfg, shutdown.trigger_send));
+    tokio::task::spawn(tick_timer(timer.clone(), cfg, shutdown.signal_recv, shutdown.ack_send));
 
     // await shutdown trigger from input task
     tokio::select! {
@@ -72,7 +72,11 @@ fn restore_term() {
     terminal::disable_raw_mode().expect("Failed to disable crossterm raw mode");
 }
 
-async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send: sync::oneshot::Sender<()>) {
+async fn read_input(
+    timer: Arc<Mutex<Timer>>,
+    cfg: Config,
+    _shutdown_send: sync::oneshot::Sender<()>,
+) {
     let mut bindings = HashMap::new();
     add_input_bindings(&mut bindings, cfg);
 
@@ -80,10 +84,10 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
         if poll(Duration::from_secs(1)).unwrap() {
             // It's guaranteed that the `read()` won't block when the `poll()`
             // function returns `true`
-            let mut speed_timer = speed_timer.lock().unwrap();
+            let mut timer = timer.lock().unwrap();
             match read() {
                 Ok(Event::Key(event)) => {
-                    try_run_input(event.code, &bindings, &mut speed_timer);
+                    try_run_input(event.code, &bindings, &mut timer);
                     if event.code == cfg.get_key_quit() {
                         break; // exiting the loop allows the task to end, which triggers `_shutdown_send`
                     }
@@ -96,19 +100,24 @@ async fn read_input(speed_timer: Arc<Mutex<Timer>>, cfg: Config, _shutdown_send:
     }
 }
 
-async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: sync::watch::Receiver<bool>, _shutdown_send: sync::mpsc::UnboundedSender<()>) {
+async fn tick_timer(
+    timer: Arc<Mutex<Timer>>,
+    cfg: Config,
+    shutdown_recv: sync::watch::Receiver<bool>,
+    _shutdown_send: sync::mpsc::UnboundedSender<()>,
+) {
     let mut interval = tokio::time::interval(Duration::from_millis(1000 / cfg.get_ups()));
 
     loop {
         if *shutdown_recv.borrow() {
             break;
         } else {
-            let mut speed_timer = speed_timer.lock().unwrap();
-            if speed_timer.is_running() {
+            let mut timer = timer.lock().unwrap();
+            if timer.is_running() {
                 execute!(
                     stdout(),
                     cursor::MoveTo(0, 0),
-                    Print(speed_timer.get_time_string()),
+                    Print(timer.get_time_string()),
                 ).expect("Failed to print current time");
             }
         }
@@ -119,39 +128,47 @@ async fn tick_timer(speed_timer: Arc<Mutex<Timer>>, cfg: Config, shutdown_recv: 
 
 // User input functions
 
-fn stopstart(speed_timer: &mut Timer) {
-    if speed_timer.is_running() { speed_timer.stop() } else { speed_timer.start() };
+fn stopstart(timer: &mut Timer) {
+    if timer.is_running() { timer.stop() } else { timer.start() };
 }
 
-fn reset(speed_timer: &mut Timer) {
-    speed_timer.reset();
+fn reset(timer: &mut Timer) {
+    timer.reset();
     execute!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
         cursor::MoveTo(0, 0),
-        Print(speed_timer.get_time_string()),
+        Print(timer.get_time_string()),
     ).expect("Reset timer failed");
 }
 
-fn split(speed_timer: &mut Timer) {
-    if speed_timer.is_running() {
-        speed_timer.split();
+fn split(timer: &mut Timer) {
+    if timer.is_running() {
+        timer.split();
         execute!(
             stdout(),
-            cursor::MoveTo(0, speed_timer.get_splits_count() + SPLITS_Y_OFFSET),
-            Print(speed_timer.get_latest_split()),
+            cursor::MoveTo(0, timer.get_splits_count() + SPLITS_Y_OFFSET),
+            Print(timer.get_latest_split()),
         ).expect("Print split failed");
     }
 }
 
-fn add_input_bindings<'a: 'b, 'b>(bindings: &'b mut HashMap<KeyCode, &'a dyn Fn(&mut Timer)>, cfg: Config) {
+fn add_input_bindings<'a: 'b, 'b>(
+    bindings: &'b mut HashMap<KeyCode, &'a dyn Fn(&mut Timer)>,
+    cfg: Config,
+) {
     bindings.insert(cfg.get_key_stopstart(), &stopstart);
     bindings.insert(cfg.get_key_reset(), &reset);
     bindings.insert(cfg.get_key_split(), &split);
 }
 
-fn try_run_input(data: KeyCode, bindings: &HashMap<KeyCode, &dyn Fn(&mut Timer)>, speed_timer: &mut Timer) {
+fn try_run_input(
+    data: KeyCode,
+    bindings: &HashMap<KeyCode,
+    &dyn Fn(&mut Timer)>,
+    timer: &mut Timer,
+) {
     if let Some(x) = bindings.get(&data) {
-        x(speed_timer)
+        x(timer)
     }
 }
